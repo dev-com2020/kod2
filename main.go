@@ -1,45 +1,32 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"log"
-	"net"
-	"strings"
-	"time"
+	// "time"
 )
 
-func echo(c net.Conn, shout string, delay time.Duration) {
-	fmt.Fprintln(c, "\t", strings.ToUpper(shout))
-	time.Sleep(delay)
-	fmt.Fprintln(c, "\t", shout)
-	time.Sleep(delay)
-	fmt.Fprintln(c, "\t", strings.ToLower(shout))
-}
+var finished = make(chan bool)
 
-//!+
-func handleConn(c net.Conn) {
-	input := bufio.NewScanner(c)
-	for input.Scan() {
-		go echo(c, input.Text(), 1*time.Second)
+// Here, the value of Sleep function is zero
+// So, this function return immediately.
+func show(str string) {
+
+	for x := 0; x < 4; x++ {
+
+		// time.Sleep(2 * time.Millisecond)
+		fmt.Println(str)
+
 	}
-	// UWAGA: ignorowanie potencjalnych błędów z funkcji input.Err()
-	c.Close()
+	finished <- true
 }
 
-//!-
-
+// Main Function
 func main() {
-	l, err := net.Listen("tcp", "localhost:8000")
-	if err != nil {
-		log.Fatal(err)
-	}
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			log.Print(err) // np. przerwano połączenie
-			continue
-		}
-		go handleConn(conn)
-	}
+
+	// Calling Goroutine
+	go show("Hello")
+	<-finished
+	// Calling function
+	show("Bye")
+
 }
