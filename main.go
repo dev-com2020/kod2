@@ -1,32 +1,113 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	// "time"
+	"log"
+	"os"
+	"sync"
 )
 
-var finished = make(chan bool)
-
-// Here, the value of Sleep function is zero
-// So, this function return immediately.
-func show(str string) {
-
-	for x := 0; x < 4; x++ {
-
-		// time.Sleep(2 * time.Millisecond)
-		fmt.Println(str)
-
+func main() {
+	input := bufio.NewScanner(os.Stdin)
+	for input.Scan() {
+		thumb, err := thumbnail.ImageFile(input.Text())
+		if err != nil {
+			log.Print(err)
+			continue
+		}
+		fmt.Println(thumb)
 	}
-	finished <- true
+	if err := input.Err(); err != nil {
+		log.Fatal(err)
+	}
 }
 
-// Main Function
-func main() {
+func makeThumbnails2(filenames []string) {
+	for _, f := range filenames {
+		go thumbnail.ImageFile(f) // UWAGA: ignorowanie błędów
+	}
 
-	// Calling Goroutine
-	go show("Hello")
-	<-finished
-	// Calling function
-	show("Bye")
+}
 
+func makeThumbnails3(filenames []string) {
+	ch := make(chan struct{})
+	for _, f := range filenames {
+		go func(f string) {
+			thumbnail.ImageFile(f) // UWAGA: ignorowanie błędów
+			ch <- struct{}{}
+		}(f)
+	}
+	// Oczekiwanie na zakończenie wszystkich funkcji goroutine.
+	for range filenames {
+		<-ch
+	}
+}
+
+func makeThumbnails4(filenames []string) error {
+	errors := make(chan error)
+	for _, f := range filenames {
+		go func(f string) {
+			_, err := thumbnail.ImageFile(f)
+			errors <- err
+		}(f)
+	}
+	for range filenames {
+		if err := <-errors; err != nil {
+			return err // UWAGA: nieprawidłowe: wyciek funkcji goroutine!
+		}
+	}
+	return nil
+}
+
+func makeThumbnails5(filenames []string) (thumbfiles []string, err error) {
+	type item struct {
+		thumbfile string
+		err       error
+	}
+	ch := make(chan item, len(filenames))
+	for _, f := range filenames {
+		go func(f string) {
+			var it item
+			it.thumbfile, it.err = thumbnail.ImageFile(f)
+			ch <- it
+		}(f)
+	}
+	for range filenames {
+		it := <-ch
+		if it.err != nil {
+			return nil, it.err
+		}
+		thumbfiles = append(thumbfiles, it.thumbfile)
+	}
+	return thumbfiles, nil
+}
+
+func makeThumbnails6(filenames <-chan string) int64 {
+	sizes := make(chan int64)
+	var wg sync.WaitGroup // liczba roboczych funkcji goroutine
+	for f := range filenames {
+		wg.Add(1)
+		// Funkcja robocza.
+		go func(f string) {
+			defer wg.Done()
+			thumb, err := thumbnail.ImageFile(f)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			info, _ := os.Stat(thumb) // można ignorować błąd
+			sizes <- info.Size()
+		}(f)
+	}
+	// Funkcja zamykania.
+	go func() {
+		wg.Wait()
+		close(sizes)
+	}()
+	var total int64
+	for size := range sizes {
+		total += size
+	}
+	return total
 }
